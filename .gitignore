@@ -1,0 +1,39 @@
+# --- Data: never commit raw datasets or anything derived from them ---
+# Real GTFS feeds, ticket extracts and all pipeline output live under data/.
+# Only the small SIMULATED fixtures under fixtures/synthetic/ are tracked.
+/data/
+*.zip
+*.parquet
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+service-account*.json
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Node ---
+node_modules/
+/frontend/dist/
+*.tsbuildinfo
+
+# --- Editors / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
