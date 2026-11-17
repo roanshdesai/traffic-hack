@@ -14,8 +14,9 @@ make demo      # build UI + data, serve both on http://127.0.0.1:8000
 Dev loop: `make api` in one terminal, `make ui` in another (http://localhost:5173).
 
 Verified on Python 3.13 and Node 22 from a clean checkout: `make setup`,
-`make data`, `make lint`, `make test` (89 backend + 26 frontend tests pass),
-`make demo`. The built UI was also driven in a 390 px wide headless browser
+`make data`, `make lint`, `make test` (92 backend + 26 frontend tests pass),
+`make demo`. The real October 2026 ticket file also validates through the
+import path (`docs/HACKATHON.md`). The built UI was also driven in a 390 px wide headless browser
 against the real API: search, all three tabs, and the insufficient-evidence
 state rendered with no console errors and no horizontal overflow.
 
@@ -37,7 +38,9 @@ Everything; the repo started empty.
 | `backend/busplanner/planner.py` | Journey search and the three rankings |
 | `backend/busplanner/{pipeline,dataset,api,cli,traffic}.py` | Build, load, serve, CLI, road-traffic boundary |
 | `backend/busplanner/synthetic.py` | Generator for the simulated fixtures |
-| `backend/tests/*.py` | 89 tests |
+| `backend/tests/*.py` | 92 tests |
+| `config/ticket_mappings/ondc_2026_10.json` | Column mapping for the real hackathon ticket file |
+| `docs/HACKATHON.md` | Problem 2 brief, rules, dates, data profile, gaps, open decision |
 | `fixtures/synthetic/**` | SIMULATED GTFS (903 usable trips, 16 places) and 1,787 ticket rows |
 | `frontend/**` | Vite + React + TypeScript UI, 26 tests |
 
@@ -72,8 +75,9 @@ Demo searches on the simulated data (date 2026-11-13, 08:00):
 
 | Item | Why | To unblock |
 | --- | --- | --- |
-| Real static GTFS | No feed in the environment; the publisher's portal was unreachable from it; no account was registered | Someone with access downloads the feed into `data/raw/` and runs the build (`docs/DATA.md` section 1) |
-| Real ticket data | No file and no schema were provided | Provide the extract and its column list; write a mapping file |
+| Real static GTFS | Needs a Delhi Transport Stack platform account and a dataset request; no account was registered | A team member signs up, requests the static bus GTFS, puts it in `data/raw/` and runs the build (`docs/DATA.md` section 1) |
+| Hackathon registration | Team registration on Where U Elevate closes 20 Nov 2026, 23:59 IST | A team member registers (`docs/HACKATHON.md`) |
+| Real ticket data | Received and validated (`docs/HACKATHON.md`), but cannot be matched without GTFS | Unblocked by the GTFS row above |
 | Google road traffic | No API key or billing; not requested | Owner decision. Boundary is `backend/busplanner/traffic.py` |
 | Pull request for this branch | The repo has no `main` yet, and nothing was pushed to `main` | Owner creates `main` (ideally from this branch's first commit), then the PR can be opened |
 
@@ -110,6 +114,10 @@ Nothing was registered, submitted or deployed.
 * No CI. No `main` branch yet, so no pull request.
 
 ## 6. Next tasks
+
+Hackathon Phase 1 closes **24 Nov 2026, 18:29 IST**. `docs/HACKATHON.md` lists
+the gaps between this prototype and the Problem 2 brief, and one open decision
+(absolute crowding labels) that the team has to make.
 
 The split below is the **proposed** one from `AGENTS.md`; it is not an agreed assignment.
 

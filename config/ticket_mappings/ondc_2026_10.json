@@ -1,0 +1,16 @@
+{
+  "_comment": "Column mapping for the Transport Stack Hackathon 2026 ticket file October-Delhi.csv (ONDC e-ticketing, 1-31 Oct 2026). Source: https://pub-091bd9e794bb4877b10b29e6df80f065.r2.dev/2026-10/README.md. The data itself is not committed; download it into data/raw/2026-10/. The route column carries direction as an UP/DOWN suffix (e.g. 8UP); it is kept whole here because how UP/DOWN maps to GTFS direction_id is not known until the static GTFS is available.",
+  "columns": {
+    "ticket_id": null,
+    "issued_at": "created_at",
+    "route": "route",
+    "board_stop": "start_stop_name",
+    "alight_stop": "end_stop_name",
+    "passengers": "passenger_count",
+    "direction": null,
+    "vehicle_id": "vehicle_number"
+  },
+  "timestamp_formats": ["%Y-%m-%d %H:%M:%S.%f%z", "%Y-%m-%d %H:%M:%S%z"],
+  "delimiter": ",",
+  "encoding": "utf-8-sig"
+}

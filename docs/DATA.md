@@ -4,12 +4,12 @@
 
 | Input | State |
 | --- | --- |
-| Static GTFS | **Simulated only.** No real Delhi feed was available in the build environment. The publisher's open transit data portal was not reachable from it (the outbound proxy refused the connection), and no account was registered. |
-| Ticket data | **Simulated only.** No ticket file was provided and its real column schema is unknown. |
+| Static GTFS | **Simulated only.** The Delhi feed is available through a Delhi Transport Stack platform account and dataset request. No account has been registered. |
+| Ticket data | **Real file received, not yet matched.** The hackathon's October 2026 ONDC e-ticketing file (2.56 million rows) validates through the import path with `config/ticket_mappings/ondc_2026_10.json`. It cannot be matched to stops or used for crowding until the static GTFS is available. See `docs/HACKATHON.md`. |
 | Google road traffic | **Not connected.** No API key, no calls. Kept separate from crowding by design. |
 
-The import paths below are built and tested on simulated data. They have **not**
-been run on a real feed, so expect the real data to surface issues the fixtures do not.
+The GTFS import path is built and tested on simulated data only. The ticket
+import path has also run on the real October 2026 file (validation only).
 
 ### Running real data when it is available
 
@@ -94,9 +94,11 @@ The source file is mapped to canonical fields by a JSON mapping:
 | `alight_stop` | no | Without it the ticket is a boarding only and cannot feed segment loads. |
 | `passengers` | no | Positive integer. If the column does not exist, each row counts as one rider. |
 | `ticket_id` | no | Used to reject duplicates. |
+| `vehicle_id` | no | Bus registration. Kept for per-trip running counts (not used by the model yet). |
 | `direction` | no | Only used when it equals a GTFS `direction_id`. |
 
-Tickets issued before 04:00 belong to the previous service day.
+Tickets issued before 04:00 belong to the previous service day. Timestamps with a
+UTC offset are converted to IST; `NULL`, `None`, `NA` and similar mean "no value".
 
 | Code | Severity | Effect |
 | --- | --- | --- |

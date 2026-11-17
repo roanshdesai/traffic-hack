@@ -14,15 +14,20 @@ from __future__ import annotations
 import csv
 import json
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from .quality import IssueLog
 
 CANONICAL_REQUIRED = ("issued_at", "route", "board_stop")
-CANONICAL_OPTIONAL = ("ticket_id", "alight_stop", "passengers", "direction")
+CANONICAL_OPTIONAL = ("ticket_id", "alight_stop", "passengers", "direction", "vehicle_id")
+#: Values that mean "no value" in exported files.
+NULL_TOKENS = frozenset({"", "NULL", "null", "None", "NA", "N/A", "nan"})
 DEFAULT_TIMESTAMP_FORMATS = (
+    "%Y-%m-%d %H:%M:%S.%f%z",
+    "%Y-%m-%d %H:%M:%S%z",
+    "%Y-%m-%d %H:%M:%S.%f",
     "%Y-%m-%d %H:%M:%S",
     "%Y-%m-%dT%H:%M:%S",
     "%Y-%m-%d %H:%M",
@@ -30,6 +35,7 @@ DEFAULT_TIMESTAMP_FORMATS = (
     "%d/%m/%Y %H:%M:%S",
 )
 MAX_PASSENGERS_PER_TICKET = 20
+IST = timezone(timedelta(hours=5, minutes=30))
 #: Tickets issued before this hour belong to the previous service day,
 #: mirroring GTFS trips that run past midnight (times >= 24:00:00).
 SERVICE_DAY_START_HOUR = 4
@@ -74,6 +80,7 @@ class Ticket:
     alight_ref: str  # "" when the ticket has no alighting stop
     passengers: int
     direction_ref: str = ""
+    vehicle_ref: str = ""  # bus registration when the source has it
 
     @property
     def service_date(self) -> date:
@@ -108,6 +115,7 @@ class TicketImport:
             "rows_valid": len(self.tickets),
             "rows_rejected": len(self.rejected),
             "rows_without_alight_stop": sum(1 for t in self.tickets if not t.alight_ref),
+            "rows_with_vehicle_id": sum(1 for t in self.tickets if t.vehicle_ref),
             "service_days": len(dates),
             "first_service_date": dates[0].isoformat() if dates else None,
             "last_service_date": dates[-1].isoformat() if dates else None,
@@ -122,6 +130,8 @@ def _parse_timestamp(value: str, formats: tuple[str, ...]) -> datetime | None:
             parsed = datetime.strptime(value, fmt)
         except ValueError:
             continue
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(IST)  # offsets other than +05:30 are converted, not dropped
         return parsed.replace(tzinfo=None)
     return None
 
@@ -166,6 +176,7 @@ def load_tickets(path: str | Path, mapping: TicketMapping | None = None) -> Tick
 
         c_id, c_ts, c_route = col("ticket_id"), col("issued_at"), col("route")
         c_board, c_alight, c_pax, c_dir = col("board_stop"), col("alight_stop"), col("passengers"), col("direction")
+        c_veh = col("vehicle_id")
         result.has_alight_column = c_alight is not None
         result.has_passenger_column = c_pax is not None
         if c_alight is None:
@@ -185,7 +196,8 @@ def load_tickets(path: str | Path, mapping: TicketMapping | None = None) -> Tick
             result.rows_total += 1
 
             def get(i: int | None, raw: list[str] = raw) -> str:
-                return raw[i].strip() if i is not None and i < len(raw) else ""
+                value = raw[i].strip() if i is not None and i < len(raw) else ""
+                return "" if value in NULL_TOKENS else value
 
             def reject(code: str, message: str, raw: list[str] = raw, line: int = line) -> None:
                 record = {h: (raw[i].strip() if i < len(raw) else "") for h, i in index.items()}
@@ -234,7 +246,15 @@ def load_tickets(path: str | Path, mapping: TicketMapping | None = None) -> Tick
                         "does not contribute to segment loads.", sample={"row": line})  # fmt: skip
             result.tickets.append(
                 Ticket(
-                    line, ticket_id or f"row-{line}", issued, route_ref, board_ref, alight_ref, passengers, get(c_dir)
+                    line,
+                    ticket_id or f"row-{line}",
+                    issued,
+                    route_ref,
+                    board_ref,
+                    alight_ref,
+                    passengers,
+                    get(c_dir),
+                    get(c_veh),
                 )  # fmt: skip
             )
     if not result.tickets:

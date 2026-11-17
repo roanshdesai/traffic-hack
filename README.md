@@ -44,7 +44,7 @@ make ui        # UI on http://localhost:5173, proxies /api to the API
 ```
 
 ```bash
-make test      # 89 backend tests (pytest) + 26 frontend tests (vitest)
+make test      # 92 backend tests (pytest) + 26 frontend tests (vitest)
 make lint      # ruff + TypeScript typecheck
 make fixtures  # regenerate the simulated fixtures (deterministic)
 ```
@@ -68,14 +68,22 @@ docs/                 architecture, API contract, data and method notes
 | [`AGENTS.md`](AGENTS.md) | Working agreement: ownership proposal, contract changes, branches. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack, data flow, decisions, milestones. |
 | [`docs/API.md`](docs/API.md) | HTTP contract. |
+| [`docs/HACKATHON.md`](docs/HACKATHON.md) | Problem 2 brief, rules, dates, real data profile, gaps, open decisions. |
 | [`docs/DATA.md`](docs/DATA.md) | Import paths, validation, matching, crowding method, fallbacks, what is blocked. |
 | [`frontend/README.md`](frontend/README.md) | Frontend commands and structure. |
 
 ## Using real data
 
-Not done yet: no real GTFS feed or ticket extract was available. The import path
-is built and tested on simulated data. `docs/DATA.md` section 1 has the exact
-commands to run once the files exist. Keep them under `data/` and out of git.
+Built for Problem 2 of the Transport Stack Hackathon 2026 (`docs/HACKATHON.md`).
+The real October 2026 ticket file validates through the import path; the real
+static GTFS is still needed before journeys can use it. `docs/DATA.md` section 1
+has the commands. Keep real data under `data/` and out of git.
+
+## Credits
+
+Built with FastAPI, Pydantic, uvicorn, React, Vite, TypeScript, Vitest and
+Testing Library. Code was written with the help of an AI coding assistant
+(Claude Code); the hackathon rules allow this when credited.
 
 ## Status
 

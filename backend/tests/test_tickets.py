@@ -83,3 +83,45 @@ def test_mapping_file_rejects_unknown_canonical_fields(tmp_path):
     bad.write_text('{"columns": {"issued_at": "t", "route": "r", "board_stop": "b", "seat_count": "s"}}')
     with pytest.raises(ValueError, match="unknown canonical field"):
         TicketMapping.load(bad)
+
+
+def test_timezone_aware_timestamps_are_converted_to_ist(tmp_path):
+    path = write(
+        tmp_path,
+        "issued_at,route,board_stop,alight_stop\n"
+        "2026-10-28 10:19:18.780611+05:30,8UP,Sim A,Sim B\n"
+        "2026-10-28 04:49:18+00:00,8UP,Sim A,Sim B\n",
+    )
+    first, second = load_tickets(path).tickets
+    assert first.issued_at.isoformat() == "2026-10-28T10:19:18.780611"
+    assert second.issued_at.isoformat() == "2026-10-28T10:19:18"  # UTC converted, not relabelled
+
+
+def test_null_tokens_are_blank_and_vehicle_id_is_kept(tmp_path):
+    mapping = TicketMapping(
+        columns={
+            "issued_at": "t",
+            "route": "r",
+            "board_stop": "b",
+            "alight_stop": "a",
+            "vehicle_id": "v",
+        }
+    )
+    path = write(
+        tmp_path,
+        "t,r,b,a,v\n2026-10-28 10:00:00,8UP,Sim A,Sim B,DL1PD6826\n"
+        "2026-10-28 10:00:00,8UP,Sim A,Sim B,NULL\n2026-10-28 10:00:00,NULL,Sim A,Sim B,\n",
+    )
+    result = load_tickets(path, mapping)
+    assert [t.vehicle_ref for t in result.tickets] == ["DL1PD6826", ""]
+    assert result.summary()["rows_with_vehicle_id"] == 1
+    assert result.rejected[0].code == "missing_route"  # "NULL" is not a route
+
+
+def test_committed_real_data_mapping_is_valid():
+    from busplanner.config import REPO_ROOT
+
+    mapping = TicketMapping.load(REPO_ROOT / "config" / "ticket_mappings" / "ondc_2026_10.json")
+    assert mapping.columns["issued_at"] == "created_at"
+    assert mapping.columns["vehicle_id"] == "vehicle_number"
+    assert "ticket_id" not in mapping.columns

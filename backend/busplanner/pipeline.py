@@ -35,9 +35,9 @@ BLOCKED_REAL_GTFS = (
     "To unblock: place the feed (zip or folder) under data/raw/ and run `busplanner build --gtfs-source real`."
 )
 BLOCKED_REAL_TICKETS = (
-    "Real ticket data is not imported. No ticket file and no column schema have been provided, so the "
-    "import path is only exercised on simulated tickets. To unblock: place the extract under data/raw/, "
-    "write a column mapping file, and run `busplanner build --tickets-source real`."
+    "Real ticket data is not part of this dataset. The October 2026 hackathon ticket file validates with "
+    "config/ticket_mappings/ondc_2026_10.json, but it cannot be matched without the real static GTFS. "
+    "To unblock: get the GTFS, then run `busplanner build --tickets-source real` (see docs/HACKATHON.md)."
 )
 NOT_CONNECTED_TRAFFIC = (
     "Google road traffic is not connected (needs an API key and billing, neither requested). It is kept "
