@@ -1,0 +1,17 @@
+{
+  "_comment": "Maps the SIMULATED ticket file onto the canonical ticket fields. Copy and edit for real data.",
+  "columns": {
+    "ticket_id": "ticket_no",
+    "issued_at": "issue_time",
+    "route": "route_no",
+    "board_stop": "from_stop",
+    "alight_stop": "to_stop",
+    "passengers": "pax",
+    "direction": null
+  },
+  "timestamp_formats": [
+    "%Y-%m-%d %H:%M:%S"
+  ],
+  "delimiter": ",",
+  "encoding": "utf-8-sig"
+}

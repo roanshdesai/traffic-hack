@@ -1,0 +1,8 @@
+route_id,agency_id,route_short_name,route_long_name,route_type
+SIM_R1,SIM_AG,S1,Sim Terminal - Sim Depot,3
+SIM_R2,SIM_AG,S2,Sim Terminal - Sim Depot,3
+SIM_R3,SIM_AG,S3,Sim North Gate - Sim Stadium,3
+SIM_R4,SIM_AG,S4,Sim Terminal - Sim Depot,3
+SIM_R5,SIM_AG,S5,Sim Stadium - Sim South End,3
+SIM_R6A,SIM_AG,S6,Sim Rose Garden - Sim Riverside,3
+SIM_R6B,SIM_AG,S 6,Sim North Gate - Sim Lake View,3

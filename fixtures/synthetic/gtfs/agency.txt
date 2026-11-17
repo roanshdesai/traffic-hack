@@ -1,0 +1,2 @@
+agency_id,agency_name,agency_url,agency_timezone
+SIM_AG,SIMULATED Transit (not a real agency),https://example.invalid,Asia/Kolkata
