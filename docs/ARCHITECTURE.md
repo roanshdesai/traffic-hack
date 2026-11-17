@@ -1,100 +1,80 @@
 # Architecture, stack and milestones
 
-Status: first runnable slice. Everything runs locally on **simulated** fixtures.
+Status: prototype. Main product: **early detection of overcrowding** at transit
+sites from people-count signals. Secondary: the earlier journey planner.
 
 ## Stack
 
 | Layer | Choice | Why |
 | --- | --- | --- |
-| Pipeline + API | Python 3.11+, FastAPI, Pydantic v2, uvicorn | One language for data work and serving; Pydantic models double as the API contract and generate OpenAPI. |
-| Data handling | Standard library `csv` / `zipfile`, plain dataclasses | No pandas yet: fewer moving parts, and every dropped row goes through one explicit validation path. Revisit at real-feed scale (see limitations). |
-| Storage | Files. Input: GTFS folder or zip + ticket CSV. Output: JSON artefacts under `data/processed/<name>/` | Nothing to provision; the built dataset is a folder that can be rebuilt from inputs at any time. |
-| Frontend | Vite, React, TypeScript, plain CSS | Standard, fast to iterate, no UI framework to fight when the demo visuals are designed. |
-| Tests | pytest (backend), Vitest + Testing Library (frontend) | |
-| Tooling | `make`, ruff, tsc | |
+| Pipeline + API | Python 3.11+, FastAPI, Pydantic v2, uvicorn | One language for data and serving; Pydantic models are the contract and generate OpenAPI. |
+| Model | Standard library only (medians, MAD, damped trend) | Explainable, no training infrastructure, every number traceable. |
+| Storage | Files: inputs under `data/raw/`, built JSON datasets under `data/processed/<name>/` | Nothing to provision; any dataset can be rebuilt from its inputs. |
+| Frontend | Vite, React, TypeScript, plain CSS, inline SVG chart | No chart or UI library to fight when visuals are designed. |
+| Tests | pytest, Vitest + Testing Library | |
 
-No database, queue, auth, map tiles or third-party API is used. Nothing is deployed.
+No database, queue, auth, map tiles, camera feed or third-party API. Nothing is deployed.
 
-## Data flow
+## Data flow (main product)
 
 ```
- static GTFS (folder/zip) ─┐
-                           ├─► gtfs.py      validate, drop bad trips ──► Feed
- ticket CSV + mapping ─────┼─► tickets.py   validate, reject bad rows ─► Ticket[]
- aliases.json (reviewed) ──┘
-                                Feed ─► network.py   stop patterns, places, transfer links
-                    Ticket[] + Network ─► matching.py  matched / ambiguous / unmatched (flag, never guess)
-                  matches + Network ─► crowding.py   segment cells, reference ranks, fallbacks
-                                          │
-            pipeline.py writes  data/processed/<name>/
-              manifest.json  quality_report.{json,md}  crowding_model.json  flagged_tickets.csv
-                                          │
-                     dataset.py loads it ─► planner.py  search + Fastest / Balanced / Less crowded
-                                          │
-                                   api.py (FastAPI)  /api/*   ◄── frontend (React)
-                                          │
-                                   traffic.py  separate road-traffic boundary (not connected)
+camera counts CSV + sites.csv ─► sources.load_camera_counts ─┐
+ticket CSV + mapping ─► tickets.load_tickets ─► sources.tickets_to_observations ─┤
+                                                                 ObservationSet (site x day x window)
+                                                                                 │
+                     pipeline.build_warning_dataset: split baseline / replay days
+                        model.Baselines.build (baseline days only)
+                        evaluate.replay (each replay window: assess, forecast, warn)
+                        evaluate.evaluate_against_events (synthetic) | describe_without_truth (real)
+                                                                                 │
+                 data/processed/<name>/ manifest, sites, baselines, replay, episodes,
+                                        events, evaluation, quality_report.{json,md}
+                                                                                 │
+                 dataset.WarningDataset ─► earlywarning/api.py (/api/*) ◄── frontend monitor
+                 traffic.py ─► separate road_traffic field (not connected)
 ```
 
-## Backend modules
+The planner keeps its own flow (GTFS + tickets ─► matching ─► segment crowding ─►
+journeys) under `/api/planner/*`; see `docs/DATA.md`.
+
+## Backend modules (main)
 
 | Module | Responsibility |
 | --- | --- |
-| `config.py` | Every threshold and period definition, plus the disclaimers. |
-| `schemas.py` | The API contract. |
-| `quality.py` | Issue log shared by the importers. |
-| `gtfs.py` | Static GTFS import and validation. |
-| `tickets.py` | Ticket import through a column mapping, and validation. |
-| `textnorm.py` | Deterministic normalisation for matching (case, spacing, punctuation only). |
-| `network.py` | Stop patterns, places (same-named nearby stops), walking transfer links. |
-| `matching.py` | Ticket route/stop matching with explicit statuses and review lists. |
-| `crowding.py` | Relative crowding cells, ranks, fallbacks, evidence grades. |
-| `planner.py` | Scheduled journey search (direct + one change) and the three rankings with reasons. |
-| `pipeline.py` | Build orchestration and the data-quality report. |
-| `dataset.py` | Loads a built dataset for serving. |
-| `api.py` | HTTP endpoints; also serves `frontend/dist` when it exists. |
-| `traffic.py` | Road-traffic boundary. Returns "not configured". |
-| `synthetic.py` | Deterministic generator for the simulated fixtures. |
-| `cli.py` | `busplanner build | build-synthetic | validate-gtfs | validate-tickets | generate-fixtures | serve`. |
+| `earlywarning/config.py` | Thresholds, source specs (window length, hours), calendar, disclaimers |
+| `earlywarning/schemas.py` | API contract |
+| `earlywarning/sources.py` | Camera-count and ticket import paths, validation, privacy guard |
+| `earlywarning/model.py` | Usual levels, status rules, damped-trend forecast, early-warning rule |
+| `earlywarning/evaluate.py` | Replay, alert episodes, backtest vs simulated events, real-data statistics |
+| `earlywarning/pipeline.py` | Build orchestration, data-quality report |
+| `earlywarning/dataset.py` | Load a built dataset, overview / timeline queries |
+| `earlywarning/api.py` | HTTP routes |
+| `earlywarning/synthetic.py` | Generator for the simulated camera fixtures |
+| `tickets.py`, `quality.py`, `textnorm.py`, `traffic.py` | Shared with the planner |
 
 ## Key decisions
 
-1. **The contract is the seam.** Backend and frontend only meet at `schemas.py` /
-   `docs/API.md` / `frontend/src/api/types.ts`. The UI can be developed against
-   mock data with no backend running.
-2. **Crowding is keyed by route segment, not by trip.** A cell is
-   `(route, from_stop, to_stop, day type, period)`. This survives route variants
-   and needs no trip id on the ticket.
-3. **Only a relative rank leaves the model.** The internal index (sampled riders
-   per scheduled trip) is never exposed as a number a rider could read as occupancy.
-4. **Insufficient evidence is a first-class result** at segment, journey and option level.
-5. **Provenance is forced, not trusted.** `--gtfs-source` and `--tickets-source`
-   are mandatory, and fixtures marked `SIMULATED` cannot be relabelled as real.
-6. **Periods, not hours.** Five time-of-day periods and two day types keep cells
-   large enough to have support. Hourly buckets are a config change once real volumes are known.
-7. **Fastest ignores crowding entirely**, so there is always a timetable-only answer.
+1. **Compare each site with its own history.** No absolute crowding claims
+   without a full-count source; operator thresholds are optional settings.
+2. **Replay, not live.** All endpoints take a replay time and use only data up to it.
+3. **Baseline and replay periods never overlap**, so evaluation is out-of-sample in time.
+4. **Unknown stays unknown:** "not enough history" and "no data" are first-class statuses.
+5. **Warnings need a sustained, rising departure** from usual; one noisy window cannot raise one.
+6. **Counts only from cameras**; identifying fields are dropped at import.
+7. **Road traffic is context, not a feature**, until a separate study shows it helps.
+8. **Ticket sites are stop names** until static GTFS is available.
 
 ## Milestones
 
 | # | Milestone | State |
 | --- | --- | --- |
-| M0 | Repo bootstrap, ignore rules, stack and contract proposal | Done |
-| M1 | GTFS and ticket import paths with validation and a data-quality report | Done (simulated data) |
-| M2 | Route and stop matching with review lists | Done |
-| M3 | Relative crowding model with support counts and fallbacks | Done |
-| M4 | Journey search and Fastest / Balanced / Less crowded with reasons | Done |
-| M5 | Journey API | Done |
-| M6 | Mobile-friendly UI on the API | Done (baseline; visuals to be designed) |
-| M7 | Real static GTFS through the import path | **Blocked**: no feed available here (see `docs/DATA.md`) |
-| M8 | Real ticket data through the import path | **Blocked**: no file and no schema provided |
-| M9 | Calibrate thresholds and validate the estimate against any ground truth | Not started; needs M7 and M8 |
-| M10 | Demo visuals: route map, crowding strip, comparison view | Not started |
-| M11 | CI (lint + tests on pull requests) | Not started; needs the owner's go-ahead to enable Actions |
-| M12 | Hosting / demo deployment | Not started; needs the owner's go-ahead |
-
-## Branch workflow
-
-See `AGENTS.md`, section 4. Work so far sits on the feature branch
-`claude/delhi-bus-planner-prototype-khz0w4`. Its first commit is a minimal
-bootstrap commit on purpose, so `main` can be created from it and the rest
-reviewed as a pull request.
+| M0 to M6 | Planner prototype (GTFS/ticket import, matching, segment crowding, planner, API, UI) | Done; now secondary |
+| E1 | Pivot: early-warning contract, people-count import paths, simulated camera fixtures | Done |
+| E2 | Baseline, status rules, forecast, early warning, backtest | Done (simulated + real tickets) |
+| E3 | Early-warning API and monitor UI | Done |
+| E4 | Real camera counts | **Blocked**: no source, needs owner agreement and go-ahead |
+| E5 | Road traffic as context, then as a tested leading indicator | **Blocked**: no API key; owner decision |
+| E6 | Ground truth (manual counts, operator incident logs) to validate alerts | Not started |
+| E7 | Static GTFS to separate same-named stops and add map positions | **Blocked**: platform account |
+| E8 | Rolling baselines, holiday calendar, calibration | Not started |
+| E9 | CI and hosting | Not started; needs the owner's go-ahead |

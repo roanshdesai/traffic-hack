@@ -1,10 +1,15 @@
-# Frontend: Delhi bus journey planner (prototype UI)
+# Frontend: Overcrowding Early Warning (prototype UI)
 
-Mobile-first React UI for the journey API. It renders what the API returns and
-adds no numbers of its own.
+Mobile-first React UI. The **main product is the overcrowding monitor**: for each
+monitored site it shows the status at a replay time, a short forecast and any
+early warning. The **journey planner is a secondary view**, kept working on its
+own endpoints under `/api/planner`.
+
+The UI renders what the API returns and adds no numbers of its own.
 
 Stack: Vite 8, React 19, TypeScript 7, Vitest 5 with Testing Library (jsdom).
-Plain CSS, no UI framework, no router, no map library.
+Plain CSS, no UI framework, no router, no chart or map library (the day chart
+is inline SVG).
 
 ## Commands
 
@@ -19,8 +24,7 @@ Run from `frontend/`.
 | `npm run build` | Typecheck, then production build into `dist/` (not committed). |
 | `npm run preview` | Serve the production build locally. |
 
-The UI needs the backend running with a processed dataset (`make data` in the
-repo root). Without one the API answers `503 no_dataset` and the UI says so.
+Without a processed dataset the API answers `503 no_dataset` and the UI says so.
 
 ## Environment
 
@@ -32,47 +36,50 @@ repo root). Without one the API answers `503 no_dataset` and the UI says so.
 
 ```
 src/
-  api/types.ts        Contract types. Mirrors backend/busplanner/schemas.py 1:1.
-  api/client.ts       fetch wrappers + ApiError ({code, message} from `detail`).
-  lib/format.ts       Time, duration and wording helpers (all fixed wording lives here).
-  components/
-    SimulatedBanner   Persistent notice when provenance.simulated is true.
-    SearchForm        Origin, destination, date, time.
-    PlaceInput        Debounced autocomplete over GET /api/stops (ARIA combobox).
-    Results           Request summary, OptionTabs and the selected option.
-    OptionTabs        Fastest / Balanced / Less crowded (ARIA tabs).
-    JourneyCard       A selected journey: times, reason, crowding summary, legs.
-    LegTimeline       Ordered stops with per-segment relative crowding.
-    CrowdingBadge     Level label + 3-bar cue (does not rely on colour).
-    EvidenceBadge     "Evidence: high | medium | low | insufficient".
-    InsufficientEvidence  The explicit "insufficient evidence" state.
-    NoJourney, ErrorState  Empty and error states.
-    DataQualityPanel  Lazy summary of GET /api/data-quality.
-    Disclaimers       Footer: disclaimers, fallbacks, separate road-traffic note.
-  test/fixtures.ts    MOCK data for tests only. Not real, not from the backend.
-  styles.css          All styles. Colours are CSS variables (light + dark).
+  App.tsx                 Shell: title, nav (monitor | planner), simulated banner, replay note.
+  api/warningTypes.ts     Main contract. Mirrors backend/busplanner/earlywarning/schemas.py 1:1.
+  api/warningClient.ts    /api/meta, /overview, /sites, /sites/{id}/timeline, /alerts, /evaluation, /data-quality.
+  api/types.ts            Planner contract (docs/API-planner.md).
+  api/client.ts           Planner client (/api/planner/*) and the shared getJson + ApiError.
+  lib/warningFormat.ts    Status wording, icons, replay-time arithmetic, reading text.
+  lib/format.ts           Planner wording and helpers.
+  components/monitor/
+    MonitorView           Replay control, status chips, site list or site detail, alerts, evaluation, data quality.
+    ReplayControl         Date + time + "-15 min" / "+15 min", bounded by the replay period.
+    StatusChips           Sites per status at the replay time.
+    SiteList              Sites in API order (most urgent first), name filter, "only alerts and warnings".
+    SiteDetail            Reading, reasons, triggers, forecast, day chart, alert episodes.
+    TimelineChart         Inline SVG: counts, usual range and median, alerts, gaps, replay line, forecast,
+                          operator threshold, simulated test events (synthetic data only), data table.
+    ForecastTable         "Forecast (estimate)".
+    AlertEpisodes         Alert episodes for a day, with forecast lead time and simulated-event match.
+    EvaluationPanel       Backtest metrics, or "No ground truth for this data".
+    StatusBadge           Status pill (icon + text + colour) and the early-warning pill.
+  components/             Shared: SimulatedBanner, DataQualityPanel (planner and warning reports),
+                          Disclaimers (with the separate road-traffic box), ErrorState; plus planner components.
+  planner/PlannerView.tsx Secondary journey planner (unchanged apart from API paths).
+  test/warningFixtures.ts MOCK data for monitor tests. Not real, not from the backend.
+  test/fixtures.ts        MOCK data for planner tests.
+  styles.css              All styles. Colours are CSS variables (light + dark).
 ```
 
-## Contract rules for the UI
+## Rules for the UI
 
-The API contract is `docs/API.md` and `backend/busplanner/schemas.py`. If either
-changes, update `src/api/types.ts` in the same PR.
+The contract is `docs/API.md` and `backend/busplanner/earlywarning/schemas.py`.
+If either changes, update `src/api/warningTypes.ts` in the same PR.
 
-Rules the UI must keep (tests in `Results.test.tsx` and `App.test.tsx` check them):
+* **Show the simulated-data banner** whenever `provenance.simulated` is true.
+* **Say it is a replay.** All data is recorded; never call anything live or real-time.
+* **Readings are estimates.** Camera counts come from counting software; ticket
+  data is a sample. Never show seats, capacity percentages, "% full" or
+  "verified" for a reading. A ratio may be shown as "1.9× usual".
+* **An operator threshold is a setting, not a verified capacity.** Say so wherever it appears.
+* **"Not enough history" and "No data" are unknown states.** They are neutral,
+  dashed and hatched, never styled like "Usual for this time".
+* **Status never relies on colour alone.** Every status has an icon and text.
+* **Simulated test events are drawn only for simulated data**, labelled as such.
+* **Road traffic stays in its own footer box**, never inside a status card.
+* Times are wall-clock strings (`YYYY-MM-DDTHH:MM`, Asia/Kolkata). Do arithmetic
+  with the helpers in `lib/warningFormat.ts`, never with the viewer's local time zone.
 
-* **Never show `relative_rank` as a number or a percentage.** It is a rank among
-  segments in the dataset, not occupancy. Show the level label only.
-* **Never say** seats, available, occupancy, "% full" or "live". Ticket samples
-  are not verified occupancy, and all times are scheduled GTFS times.
-* Level wording is fixed: `lower` = "Relatively less crowded", `typical` =
-  "About typical", `higher` = "Relatively more crowded",
-  `insufficient_evidence` = "Not enough evidence".
-* `insufficient_evidence` means "unknown". It gets its own neutral, hatched
-  style. It must never look like low crowding and must never be green.
-* Crowding must not rely on colour alone: keep the bar-count cue and the text.
-* Show the support count ("N tickets over D days") and the pooling basis next
-  to every segment estimate.
-* Show the "Simulated data" banner whenever `provenance.simulated` is true.
-* Road traffic stays in its own boxed note. Never merge it with crowding.
-* Times are formatted by slicing the ISO string (`formatClock`), not with
-  `Date`, so they do not shift with the viewer's time zone.
+`src/App.test.tsx` scans the rendered monitor for forbidden words.

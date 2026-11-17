@@ -109,3 +109,29 @@ Options:
 
 Recommendation: 1 now, and 3 in parallel. Move to 2 only if the organisers
 provide a defensible scale factor.
+
+## Pivot and the hackathon (17 Nov 2026)
+
+The product focus changed from a crowdedness-aware journey planner to early
+detection of overcrowding. This matters for submission:
+
+* **Phase 1 only accepts Problem 1 or Problem 2.** Problem 2 asks for a
+  crowding model *shown inside a journey planner*. The planner still exists as
+  a secondary page, but it does not yet show the early-warning output.
+* The new focus is closest to **Problem 5** (metro and bus crowding
+  estimation), which is open only to shortlisted teams in Phase 2.
+* Problem 2 is judged on how well crowding is grounded in the ticket data. The
+  early-warning model runs on the real ticket file, but flags *unusual
+  activity*, not crowding levels on board.
+
+Options for the team to decide:
+
+1. Submit Phase 1 as Problem 2, framed as "crowding model with early warning,
+   plus a planner that shows it". This needs the planner to show the warning
+   status of stops on each option (about a day of work) and the static GTFS.
+2. Keep the early-warning focus and aim it at Problem 5 if shortlisted, using a
+   Problem 2 submission to get through Phase 1.
+3. Ask the organisers whether an early-warning tool fits Problem 2.
+
+Recommendation: option 1, since it keeps both the new focus and Phase 1
+eligibility.

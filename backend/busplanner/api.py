@@ -1,4 +1,9 @@
-"""HTTP API. Contract: ``schemas.py`` / ``docs/API.md``."""
+"""HTTP app.
+
+Main product: overcrowding early warning at ``/api/*`` (``earlywarning/api.py``,
+contract ``docs/API.md``). Secondary: the journey planner at ``/api/planner/*``
+(contract ``docs/API-planner.md``).
+"""
 
 from __future__ import annotations
 
@@ -21,6 +26,8 @@ from .config import (
 )
 from .crowding import FALLBACKS
 from .dataset import DatasetError, LoadedDataset, load_dataset
+from .earlywarning.api import create_router
+from .earlywarning.config import dataset_dir_from_env as warning_dataset_dir_from_env
 from .network import PlaceGroup
 from .pipeline import IST
 from .schemas import (
@@ -55,18 +62,33 @@ def _clock(minutes: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
-def create_app(dataset_dir: str | Path | None = None, serve_frontend: bool = True) -> FastAPI:
+def create_app(
+    dataset_dir: str | Path | None = None,
+    serve_frontend: bool = True,
+    warning_dataset_dir: str | Path | None = None,
+) -> FastAPI:
+    """``dataset_dir`` is the (secondary) planner dataset; ``warning_dataset_dir`` the main one."""
     app = FastAPI(
-        title="Delhi bus crowding-aware journey planner (prototype)",
-        version="0.1.0",
+        title="Overcrowding early warning (prototype)",
+        version="0.2.0",
         description=(
-            "Scheduled bus journeys ranked as Fastest, Balanced and Less crowded. Times are scheduled GTFS "
-            "times, not live. Crowding is a relative estimate from ticket samples, not occupancy."
+            "Early detection of overcrowding from people-count signals (camera counts, ticket samples), "
+            "replayed from recorded data. Statuses are estimates, not verified real-world conditions. "
+            "A secondary journey planner is served under /api/planner."
         ),
     )
     directory = Path(dataset_dir) if dataset_dir else dataset_dir_from_env()
     state: dict[str, Any] = {"dataset": None, "error": None}
     traffic = default_provider()
+
+    def planner_available() -> bool:
+        try:
+            dataset()
+        except HTTPException:
+            return False
+        return True
+
+    app.include_router(create_router(warning_dataset_dir or warning_dataset_dir_from_env(), traffic, planner_available))
 
     def dataset() -> LoadedDataset:
         if state["dataset"] is None and state["error"] is None:
@@ -81,7 +103,7 @@ def create_app(dataset_dir: str | Path | None = None, serve_frontend: bool = Tru
     def disclaimers(ds: LoadedDataset) -> list[str]:
         return ([SIMULATED_DISCLAIMER] if ds.provenance.simulated else []) + list(DISCLAIMERS)
 
-    @app.get("/api/health", response_model=HealthResponse)
+    @app.get("/api/planner/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         try:
             dataset()
@@ -89,7 +111,7 @@ def create_app(dataset_dir: str | Path | None = None, serve_frontend: bool = Tru
             return HealthResponse(status="no_dataset", dataset_dir=str(directory), detail=exc.detail["message"])
         return HealthResponse(status="ok", dataset_dir=str(directory))
 
-    @app.get("/api/meta", response_model=MetaResponse)
+    @app.get("/api/planner/meta", response_model=MetaResponse)
     def meta() -> MetaResponse:
         ds = dataset()
         feed, net = ds.network.feed, ds.network
@@ -113,12 +135,12 @@ def create_app(dataset_dir: str | Path | None = None, serve_frontend: bool = Tru
             road_traffic=traffic.status(),
         )
 
-    @app.get("/api/stops", response_model=StopSearchResponse)
+    @app.get("/api/planner/stops", response_model=StopSearchResponse)
     def stops(q: str = "", limit: int = Query(10, ge=1, le=50)) -> StopSearchResponse:
         ds = dataset()
         return StopSearchResponse(query=q, places=[_place(p) for p in ds.network.search_places(q, limit)])
 
-    @app.get("/api/journeys", response_model=JourneyResponse)
+    @app.get("/api/planner/journeys", response_model=JourneyResponse)
     def journeys(
         origin_ref: str = Query(..., alias="from", description="place_id or stop_id"),
         dest_ref: str = Query(..., alias="to", description="place_id or stop_id"),
@@ -173,7 +195,7 @@ def create_app(dataset_dir: str | Path | None = None, serve_frontend: bool = Tru
             road_traffic=traffic.status(),
         )
 
-    @app.get("/api/data-quality")
+    @app.get("/api/planner/data-quality")
     def data_quality() -> dict[str, Any]:
         return dataset().quality_report
 

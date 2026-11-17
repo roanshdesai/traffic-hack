@@ -1,151 +1,131 @@
 # Handoff
 
-State of the repo after the first slice. Written for the next person or agent.
+State of the repo after the pivot to **early detection of overcrowding**
+(17 Nov 2026). Written for the next person or agent.
 
-## 1. Setup
+## 1. What changed in the pivot
+
+* **Main product** is now the overcrowding monitor: per-site status against the
+  site's usual level, a one-hour forecast and an early warning. API at `/api/*`,
+  UI "Overcrowding monitor" (default page).
+* **Route planning is secondary.** Its code is untouched apart from paths: API
+  moved to `/api/planner/*`, UI moved to `frontend/src/planner/` behind the
+  "Journey planner (secondary)" tab. It still works and its tests still pass.
+* **Reused, not rewritten:** the ticket importer (now feeds per-stop boardings),
+  the issue log and data-quality report pattern, the road-traffic boundary,
+  the simulated-data banner, disclaimers and data-quality panel, the Makefile
+  and test guards.
+
+## 2. Setup
 
 ```bash
-make setup     # python venv + pip install -e backend[dev]; npm ci in frontend
-make data      # build data/processed/synthetic from fixtures/synthetic
-make test      # backend + frontend tests
-make demo      # build UI + data, serve both on http://127.0.0.1:8000
+make setup             # python venv + npm ci
+make data              # both simulated datasets
+make test              # backend + frontend tests
+make demo              # build UI + data, serve on http://127.0.0.1:8000
+make data-real-tickets # real Oct 2026 ticket file -> early-warning dataset (needs data/raw/2026-10/)
+make api-real          # serve that dataset
 ```
 
-Dev loop: `make api` in one terminal, `make ui` in another (http://localhost:5173).
+Verified on Python 3.13 and Node 22: `make lint`, `make test` (132 backend
+tests, 48 frontend tests), `make data`, `make data-real-tickets`, `make demo`.
+The built UI was driven in a 390 px headless browser against both the simulated
+and the real-ticket datasets: monitor, site detail with chart and forecast,
+simulated banner present only for simulated data, no console errors, no
+horizontal overflow.
 
-Verified on Python 3.13 and Node 22 from a clean checkout: `make setup`,
-`make data`, `make lint`, `make test` (92 backend + 26 frontend tests pass),
-`make demo`. The real October 2026 ticket file also validates through the
-import path (`docs/HACKATHON.md`). The built UI was also driven in a 390 px wide headless browser
-against the real API: search, all three tabs, and the insufficient-evidence
-state rendered with no console errors and no horizontal overflow.
-
-## 2. What was added
-
-Everything; the repo started empty.
+## 3. What was added
 
 | Path | What |
 | --- | --- |
-| `.gitignore`, `.env.example`, `Makefile` | Ignore rules for data and secrets, env names, dev commands |
-| `README.md`, `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md` | Overview, this file, working agreement |
-| `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/DATA.md` | Stack and milestones, API contract, data and method |
-| `backend/pyproject.toml` | Package `busplanner`, CLI entry point, dev tools |
-| `backend/busplanner/config.py` | All thresholds, periods, disclaimers |
-| `backend/busplanner/schemas.py` | API contract (Pydantic) |
-| `backend/busplanner/{gtfs,tickets,quality,textnorm}.py` | Import paths and validation |
-| `backend/busplanner/{network,matching}.py` | Stop patterns, places, route/stop matching |
-| `backend/busplanner/crowding.py` | Relative crowding model and fallbacks |
-| `backend/busplanner/planner.py` | Journey search and the three rankings |
-| `backend/busplanner/{pipeline,dataset,api,cli,traffic}.py` | Build, load, serve, CLI, road-traffic boundary |
-| `backend/busplanner/synthetic.py` | Generator for the simulated fixtures |
-| `backend/tests/*.py` | 92 tests |
-| `config/ticket_mappings/ondc_2026_10.json` | Column mapping for the real hackathon ticket file |
-| `docs/HACKATHON.md` | Problem 2 brief, rules, dates, data profile, gaps, open decision |
-| `fixtures/synthetic/**` | SIMULATED GTFS (903 usable trips, 16 places) and 1,787 ticket rows |
-| `frontend/**` | Vite + React + TypeScript UI, 26 tests |
+| `backend/busplanner/earlywarning/` | `config`, `schemas`, `sources`, `model`, `evaluate`, `pipeline`, `dataset`, `api`, `synthetic` |
+| `backend/busplanner/api.py`, `cli.py` | Early-warning router mounted at `/api`; planner moved to `/api/planner`; `warn-*` CLI commands |
+| `backend/tests/test_ew_*.py` | Import paths, model, backtest, API contract, fixture labelling |
+| `fixtures/synthetic/earlywarning/` | SIMULATED: 5 sites, 3 weeks of 15-min counts, 5 injected events, planted defects |
+| `frontend/src/components/monitor/`, `src/App.tsx`, `src/api/warning*.ts`, `src/lib/warningFormat.ts` | Monitor UI, replay control, site detail, SVG timeline, forecast table, alerts, evaluation panel |
+| `frontend/src/planner/` | The former planner app (secondary) |
+| `docs/METHOD.md` | Technical note: method, results, weaknesses |
+| `docs/API.md` / `docs/API-planner.md` | New main contract / the planner's contract |
+| `Makefile` | `data` builds both; `data-real-tickets`, `api-real` |
 
-## 3. What works
+## 4. What works
 
-* **GTFS import** from a folder or zip with validation; bad trips are dropped whole and reported.
-* **Ticket import** through a column-mapping file with validation; bad rows are rejected and reported.
-* **Data-quality report** as JSON (served at `/api/data-quality`) and Markdown, plus a
-  `flagged_tickets.csv` listing every rejected, unmatched or ambiguous row.
-* **Matching** that never guesses: ambiguous routes, ambiguous stop runs, unknown
-  and misspelt references are flagged, with close matches offered as suggestions only.
-* **Relative crowding** per route segment, period and day type, with support
-  counts, three documented fallback levels and an evidence grade.
-* **Journey search**: direct and one-change journeys on scheduled times.
-* **Three rankings with reasons**, including the explicit `insufficient_evidence` status.
-* **API**: `/api/health`, `/api/meta`, `/api/stops`, `/api/journeys`, `/api/data-quality`; OpenAPI at `/docs`.
-* **UI**: search with autocomplete, three option tabs, journey card, stop timeline
-  with per-segment crowding and support counts, insufficient-evidence / no-journey /
-  error states, simulated-data banner, data-quality panel, separate road-traffic note.
-* **Guards**: simulated inputs cannot be labelled real; tests fail if raw data,
-  secrets or occupancy-style fields are introduced.
+* **Camera-count import** (CSV + sites file + column mapping) with validation,
+  a privacy guard against identifying columns, and gap reporting.
+* **Ticket-sample import**: real Oct 2026 Delhi e-tickets aggregate into hourly
+  boardings for 1,275 boarding stops.
+* **Usual levels** per site, day type and time, with fallbacks and an evidence grade.
+* **Statuses** with plain-language reasons; operator thresholds for full-count sources.
+* **Forecast** (60 min) with a likely range, and an **early warning** for
+  sustained rises.
+* **Backtest** on simulated events, and descriptive statistics plus a
+  week-to-week stability check on real data.
+* **UI**: replay time control, status summary, site list sorted by urgency,
+  site detail with chart, alerts per day, evaluation and data-quality panels,
+  separate road-traffic box, secondary planner tab.
 
-Demo searches on the simulated data (date 2026-11-13, 08:00):
+Results (details in `docs/METHOD.md`):
 
-| From | To | Shows |
-| --- | --- | --- |
-| Sim Terminal | Sim Depot | Three different journeys; Fastest has no crowding evidence |
-| Sim Stadium | Sim South End | Balanced and Less crowded are "insufficient evidence" |
-| Sim North Gate | Sim Depot | One-change journeys; fallback evidence on one segment |
+* Simulated (test data, not evidence of real accuracy): 4/4 events detected,
+  0 false alert episodes, both gradual build-ups warned 30 min before the alert,
+  sudden events not warned (by design).
+* Real tickets (no ground truth): 151 alert episodes at 114 of 1,275 stops over
+  22 to 31 Oct; clustered on two Saturdays, partly a baseline effect; ticket-based
+  warnings are weak (52 issued, 1 ahead of an alert).
 
-## 4. What is blocked
+Demo replay times (simulated): **18 Nov 17:00** Sim Stadium Stop (early warning,
+then an alert from 17:30); **17 Nov 08:00** Sim Central Bus Terminal (sudden
+spike, threshold alert); **19 Nov 11:00** Sim College Stop (sensor outage shown
+as no data); **21 Nov 11:30** Sim Market Stop (build-up warned 30 min before the
+12:00 alert); **20 Nov 07:45** Sim Metro Interchange Stop (fast surge, no warning).
+
+## 5. Blocked
 
 | Item | Why | To unblock |
 | --- | --- | --- |
-| Real static GTFS | Needs a Delhi Transport Stack platform account and a dataset request; no account was registered | A team member signs up, requests the static bus GTFS, puts it in `data/raw/` and runs the build (`docs/DATA.md` section 1) |
-| Hackathon registration | Team registration on Where U Elevate closes 20 Nov 2026, 23:59 IST | A team member registers (`docs/HACKATHON.md`) |
-| Real ticket data | Received and validated (`docs/HACKATHON.md`), but cannot be matched without GTFS | Unblocked by the GTFS row above |
-| Google road traffic | No API key or billing; not requested | Owner decision. Boundary is `backend/busplanner/traffic.py` |
-| Pull request for this branch | The repo has no `main` yet, and nothing was pushed to `main` | Owner creates `main` (ideally from this branch's first commit), then the PR can be opened |
+| Real camera counts | No source; needs an agreement with a camera owner and the owner's go-ahead; counts only | Provide an aggregated export (site, window, count); write a mapping |
+| Google road traffic | No API key or billing; not requested | Owner decision. Boundary: `backend/busplanner/traffic.py` |
+| Ground truth | No observed crowding or incident logs | Manual counts at a few stops, or operator incident records |
+| Static GTFS | Needs a Delhi Transport Stack account | A team member signs up and requests it |
+| Hackathon registration / submission | Owner's decision; closes 20 Nov 23:59 IST | See `docs/HACKATHON.md` |
 
-Nothing was registered, submitted or deployed.
+Nothing was registered, submitted, deployed or connected.
 
-## 5. Known limitations
+## 6. Known limitations
 
-**Data and method**
+* No real camera data, no ground truth: no result is validated.
+* Thresholds are uncalibrated and were tuned while looking at the simulated data.
+* Ticket counts measure e-ticket use, not people; stops are merged by name.
+* Static baselines per build; a lasting change keeps alerting until rebuilt.
+* Holidays are listed by hand (`--holiday`). Only 3 Saturdays of history in the real data.
+* Forecast extends an existing trend only; it cannot predict a surge before it starts.
+* Real-data dataset files are large (about 13 MB JSON) and load in a few seconds.
+* The package is still named `busplanner`.
+* No CI; no `main` branch yet, so no pull request.
 
-* Only simulated data has been through the pipeline. Real feeds will raise issues the fixtures do not.
-* The crowding estimate is unvalidated: there is no ground truth, and every threshold in `config.py` is an uncalibrated default.
-* A quiet segment and an unsampled segment are indistinguishable; both report insufficient evidence.
-* Different ticket capture rates between routes would bias the relative ranking. No correction exists.
-* Exposure is scheduled trips, not trips actually run; vehicle capacity is ignored.
-* Route variants make some tickets ambiguous (`ambiguous_path`, 66 rows in the fixtures). Trip or vehicle ids on tickets could resolve this; they are not used yet.
-* Stop-name matching is exact after normalisation. Real data will likely need a reviewed alias table.
-* Untimed GTFS stops are not interpolated: a trip with a blank time is dropped.
+## 7. Next tasks
 
-**Planner**
-
-* At most one change. Changes only between stops within 250 m, at a fixed 1.2 m/s walk and 4 min minimum.
-* No walking to or from the origin and destination, no fares, no accessibility data.
-* Trips from the previous service day that run past midnight are not considered for early-morning searches.
-* Search is a pattern scan in pure Python. Fine for the fixtures; untested at full-city scale.
-* The feed is parsed from CSV on every server start; a large feed will make startup slow.
-
-**Frontend**
-
-* Baseline visuals only; no map. Arrivals after midnight show the time without a "+1 day" marker.
-* No end-to-end test is committed (the browser check was run by hand).
-
-**Process**
-
-* No CI. No `main` branch yet, so no pull request.
-
-## 6. Next tasks
-
-Hackathon Phase 1 closes **24 Nov 2026, 18:29 IST**. `docs/HACKATHON.md` lists
-the gaps between this prototype and the Problem 2 brief, and one open decision
-(absolute crowding labels) that the team has to make.
-
-The split below is the **proposed** one from `AGENTS.md`; it is not an agreed assignment.
+The split is the **proposed** one from `AGENTS.md`, not an agreed assignment.
 
 ### Frontend and demo visuals (proposed: Aashu)
 
-Work in `frontend/` only, against `docs/API.md`. The mock data in
-`frontend/src/test/fixtures.ts` lets you work without the backend.
-
-1. Design pass on the journey card and timeline; keep every rule in `AGENTS.md` section 1.
-2. Side-by-side comparison of the three options (time, changes, crowding, evidence).
-3. Route map from the `lat`/`lon` on each leg stop, coloured by segment level, with a distinct style for insufficient evidence.
-4. Demo script: a guided path through the three demo searches above.
-5. Add a "+1 day" marker for arrivals after midnight and a "now" shortcut for date/time.
-6. Commit a Playwright end-to-end test for search, tabs and the insufficient-evidence state.
+1. Design pass on the monitor and site detail; keep every rule in `AGENTS.md` section 1.
+2. A map of sites coloured by status (sites have `lat`/`lon` for camera data; ticket sites need GTFS).
+3. A "play" control that steps the replay automatically for the demo video.
+4. An operator view: sites x hours heat map of alert and busier windows.
+5. Commit a Playwright end-to-end test (monitor, detail, replay stepping).
 
 ### Data, modelling and backend (proposed: Roansh)
 
-1. Obtain the real static GTFS, run `validate-gtfs`, and fix what the report shows.
-2. Obtain the ticket extract and its schema; write the mapping; review the match report and build the alias table.
-3. Decide how to handle `ambiguous_path` (use trip/vehicle id or time if the tickets carry them).
-4. Calibrate thresholds on real volumes; consider hourly buckets and corridor-level pooling.
-5. Find any ground truth (counts, surveys) to validate the relative ranking.
-6. Performance for a full feed: cache the parsed network, index departures per stop.
-7. Previous-service-day trips after midnight; walking legs at the ends.
+1. Find any ground truth (manual counts, incident logs) and score the real-data alerts.
+2. Rolling baselines (last N weeks) and a proper holiday calendar.
+3. Calibrate thresholds on a held-out simulated seed and, later, on real labels.
+4. Per-site minimum sizes for ticket data; investigate the Saturday clusters.
+5. If a camera source appears: map its export, check counting confidence, add per-site thresholds with the operator.
+6. If road traffic is approved: add it as a separate context panel first; test it as a leading indicator in a separate study.
 
-### Integration and testing (both)
+### Both
 
-1. Create `main`, open the PR for this branch, agree the ownership split.
-2. Add CI (lint + tests on pull requests) once the owner agrees to enable it.
-3. Contract test that fails when `schemas.py` and `frontend/src/api/types.ts` drift.
-4. Decide whether and where to host a demo. Nothing is deployed today.
+1. Decide the hackathon framing (`docs/HACKATHON.md`, "Pivot and the hackathon").
+2. Create `main`, open a PR for this branch, agree the ownership split.
+3. CI once the owner agrees; contract test between `schemas.py` and `warningTypes.ts`.

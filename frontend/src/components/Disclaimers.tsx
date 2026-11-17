@@ -3,6 +3,8 @@ import { BASIS_LABEL, humanize } from "../lib/format";
 
 interface Props {
   disclaimers: string[];
+  /** Heading for the disclaimer list. */
+  heading?: string;
   roadTraffic: RoadTraffic | null;
   fallbacks?: FallbackInfo[];
 }
@@ -20,12 +22,12 @@ function fallbackLabel(basis: string | undefined): string {
 }
 
 /** Footer: what the numbers mean, how estimates fall back, and the separate road-traffic note. */
-export function Disclaimers({ disclaimers, roadTraffic, fallbacks = [] }: Props) {
+export function Disclaimers({ disclaimers, roadTraffic, fallbacks = [], heading = "About these results" }: Props) {
   return (
     <footer className="footer">
       {disclaimers.length > 0 && (
-        <section className="footer__block" aria-label="About these results">
-          <h2 className="footer__heading">About these results</h2>
+        <section className="footer__block" aria-label={heading}>
+          <h2 className="footer__heading">{heading}</h2>
           <ul className="footer__list">
             {disclaimers.map((text, i) => (
               <li key={i}>{text}</li>
@@ -58,7 +60,7 @@ export function Disclaimers({ disclaimers, roadTraffic, fallbacks = [] }: Props)
           <p>{roadTraffic.note}</p>
           <p className="road-traffic__note">
             Road traffic describes vehicles on roads. It is kept apart from passenger crowding and is not part
-            of any crowding level shown above.
+            of any crowding level, status or forecast shown on this page.
           </p>
         </section>
       )}

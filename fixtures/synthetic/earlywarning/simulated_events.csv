@@ -1,0 +1,6 @@
+site_id,start,onset,end,kind,description,data_label
+SIM_SITE_04,2026-11-18 16:15,2026-11-18 17:00,2026-11-18 20:30,event_crowd,Simulated: crowd building gradually for two hours before an evening match.,SIMULATED
+SIM_SITE_02,2026-11-20 07:30,2026-11-20 07:45,2026-11-20 09:15,service_disruption,Simulated: fast surge at the interchange after a rail disruption.,SIMULATED
+SIM_SITE_03,2026-11-21 10:30,2026-11-21 11:15,2026-11-21 14:30,market_day,Simulated: festival sale building through the morning.,SIMULATED
+SIM_SITE_01,2026-11-17 08:00,2026-11-17 08:00,2026-11-17 09:00,sudden_spike,Simulated: sudden spike after several buses were cancelled at once (no build-up to forecast).,SIMULATED
+SIM_SITE_03,2026-11-07 12:00,2026-11-07 12:15,2026-11-07 13:15,market_day,Simulated: an earlier busy day inside the baseline period.,SIMULATED

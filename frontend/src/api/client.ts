@@ -1,3 +1,7 @@
+/**
+ * Client for the secondary journey planner (`/api/planner/*`, see docs/API-planner.md).
+ * The main early-warning client is `warningClient.ts`.
+ */
 import type {
   DataQualityReport,
   ErrorDetail,
@@ -39,7 +43,8 @@ function parseErrorDetail(status: number, body: unknown): ErrorDetail {
   return { code: `http_${status}`, message: `The server answered with HTTP ${status}.` };
 }
 
-async function getJson<T>(path: string, params?: Record<string, string>, signal?: AbortSignal): Promise<T> {
+/** GET a JSON endpoint; errors become `ApiError`. Shared by the planner and warning clients. */
+export async function getJson<T>(path: string, params?: Record<string, string>, signal?: AbortSignal): Promise<T> {
   const query = params ? `?${new URLSearchParams(params).toString()}` : "";
   let response: Response;
   try {
@@ -51,7 +56,7 @@ async function getJson<T>(path: string, params?: Record<string, string>, signal?
     if (err instanceof DOMException && err.name === "AbortError") throw err;
     throw new ApiError(0, {
       code: "network_error",
-      message: "Could not reach the journey API. Is the backend running?",
+      message: "Could not reach the API. Is the backend running?",
     });
   }
 
@@ -72,11 +77,11 @@ async function getJson<T>(path: string, params?: Record<string, string>, signal?
 }
 
 export function fetchMeta(signal?: AbortSignal): Promise<MetaResponse> {
-  return getJson<MetaResponse>("/api/meta", undefined, signal);
+  return getJson<MetaResponse>("/api/planner/meta", undefined, signal);
 }
 
 export function searchStops(q: string, limit = 8, signal?: AbortSignal): Promise<StopSearchResponse> {
-  return getJson<StopSearchResponse>("/api/stops", { q, limit: String(limit) }, signal);
+  return getJson<StopSearchResponse>("/api/planner/stops", { q, limit: String(limit) }, signal);
 }
 
 export interface JourneyQuery {
@@ -91,12 +96,12 @@ export interface JourneyQuery {
 
 export function fetchJourneys(query: JourneyQuery, signal?: AbortSignal): Promise<JourneyResponse> {
   return getJson<JourneyResponse>(
-    "/api/journeys",
+    "/api/planner/journeys",
     { from: query.from, to: query.to, date: query.date, time: query.time },
     signal,
   );
 }
 
 export function fetchDataQuality(signal?: AbortSignal): Promise<DataQualityReport> {
-  return getJson<DataQualityReport>("/api/data-quality", undefined, signal);
+  return getJson<DataQualityReport>("/api/planner/data-quality", undefined, signal);
 }

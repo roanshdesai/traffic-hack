@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { fetchDataQuality } from "../api/client";
 import type { BlockedItem, DataQualityReport, QualityIssue, QualitySection } from "../api/types";
+import type { WarningDataQualityReport, WarningQualitySource } from "../api/warningTypes";
 import { humanize } from "../lib/format";
 import { ErrorState } from "./ErrorState";
 
+type AnyReport = DataQualityReport | WarningDataQualityReport;
+
 interface Props {
-  /** Injectable for tests; defaults to GET /api/data-quality. */
-  load?: () => Promise<DataQualityReport>;
+  /** Defaults to the planner report (GET /api/planner/data-quality). The monitor passes its own loader. */
+  load?: () => Promise<AnyReport>;
+}
+
+function isWarningReport(report: AnyReport): report is WarningDataQualityReport {
+  return Array.isArray((report as { sources?: unknown }).sources);
 }
 
 function IssueList({ issues }: { issues: QualityIssue[] }) {
@@ -49,6 +56,77 @@ function SectionBlock({ title, section }: { title: string; section: QualitySecti
       )}
       <IssueList issues={section.issues ?? []} />
     </section>
+  );
+}
+
+function BlockedList({ blocked }: { blocked: BlockedItem[] }) {
+  return (
+    <section className="dq__section">
+      <h4>Blocked</h4>
+      {blocked.length === 0 ? (
+        <p className="dq__none">Nothing is listed as blocked.</p>
+      ) : (
+        <ul className="dq__blocked">
+          {blocked.map((item, i) => (
+            <li key={i}>{blockedText(item)}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function scalar(value: unknown): string | null {
+  if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") return String(value);
+  return null;
+}
+
+/** Report of the early-warning build: one section per input source, plus model notes. */
+function WarningReportView({ report }: { report: WarningDataQualityReport }) {
+  const modelEntries = Object.entries(report.model ?? {})
+    .map(([key, value]) => [key, scalar(value)] as const)
+    .filter((entry): entry is readonly [string, string] => entry[1] !== null);
+  return (
+    <div className="dq__report" data-testid="dq-report">
+      {report.generated_at && <p className="dq__generated">Report generated {report.generated_at}</p>}
+      {report.sources.length === 0 && <p className="dq__none">No input sources are listed.</p>}
+      {report.sources.map((source: WarningQualitySource, i) => {
+        const title = [source.name, source.kind ? humanize(source.kind) : null].filter(Boolean).join(" · ") || `Source ${i + 1}`;
+        return (
+          <section className="dq__section" key={`${source.name ?? "source"}-${i}`}>
+            <h4>{title}</h4>
+            {(typeof source.rows_total === "number" || typeof source.rows_valid === "number") && (
+              <p className="dq__counts">
+                {typeof source.rows_total === "number" && <span className="dq__count">{source.rows_total} rows</span>}
+                {typeof source.rows_valid === "number" && <span className="dq__count">{source.rows_valid} usable</span>}
+              </p>
+            )}
+            {source.summary && (
+              <p className="dq__counts">
+                <span className="dq__count dq__count--error">{source.summary.errors} errors</span>
+                <span className="dq__count dq__count--warning">{source.summary.warnings} warnings</span>
+                <span className="dq__count dq__count--info">{source.summary.infos} notes</span>
+              </p>
+            )}
+            <IssueList issues={(source.issues ?? []) as QualityIssue[]} />
+          </section>
+        );
+      })}
+      {modelEntries.length > 0 && (
+        <section className="dq__section">
+          <h4>Model</h4>
+          <ul className="dq__statuses">
+            {modelEntries.map(([key, value]) => (
+              <li key={key}>
+                <span>{humanize(key)}</span>
+                <span>{value}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <BlockedList blocked={(report.blocked ?? []) as BlockedItem[]} />
+    </div>
   );
 }
 
@@ -101,18 +179,7 @@ function ReportView({ report }: { report: DataQualityReport }) {
           <p className="dq__none">Not included in this report.</p>
         )}
       </section>
-      <section className="dq__section">
-        <h4>Blocked</h4>
-        {blocked.length === 0 ? (
-          <p className="dq__none">Nothing is listed as blocked.</p>
-        ) : (
-          <ul className="dq__blocked">
-            {blocked.map((item, i) => (
-              <li key={i}>{blockedText(item)}</li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <BlockedList blocked={blocked} />
     </div>
   );
 }
@@ -120,7 +187,7 @@ function ReportView({ report }: { report: DataQualityReport }) {
 /** Collapsible summary of the pipeline's data-quality report. Loads on first open. */
 export function DataQualityPanel({ load = () => fetchDataQuality() }: Props) {
   const [state, setState] = useState<
-    { kind: "idle" } | { kind: "loading" } | { kind: "ready"; report: DataQualityReport } | { kind: "error"; error: unknown }
+    { kind: "idle" } | { kind: "loading" } | { kind: "ready"; report: AnyReport } | { kind: "error"; error: unknown }
   >({ kind: "idle" });
 
   function fetchReport() {
@@ -141,7 +208,12 @@ export function DataQualityPanel({ load = () => fetchDataQuality() }: Props) {
       <div className="dq__content">
         {state.kind === "loading" && <p className="dq__none">Loading the data-quality report…</p>}
         {state.kind === "error" && <ErrorState error={state.error} onRetry={fetchReport} />}
-        {state.kind === "ready" && <ReportView report={state.report} />}
+        {state.kind === "ready" &&
+          (isWarningReport(state.report) ? (
+            <WarningReportView report={state.report} />
+          ) : (
+            <ReportView report={state.report} />
+          ))}
       </div>
     </details>
   );

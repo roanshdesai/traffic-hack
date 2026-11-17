@@ -1,0 +1,6 @@
+site_id,name,kind,lat,lon,alert_threshold,max_plausible,data_label
+SIM_SITE_01,Sim Central Bus Terminal,terminal,28.6000,77.1500,330,2000,SIMULATED
+SIM_SITE_02,Sim Metro Interchange Stop,bus_stop,28.6100,77.1700,230,1500,SIMULATED
+SIM_SITE_03,Sim Market Stop,bus_stop,28.6150,77.1800,140,1000,SIMULATED
+SIM_SITE_04,Sim Stadium Stop,bus_stop,28.5980,77.1920,120,1000,SIMULATED
+SIM_SITE_05,Sim College Stop,bus_stop,28.6200,77.1900,100,800,SIMULATED

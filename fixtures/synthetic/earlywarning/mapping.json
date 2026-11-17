@@ -1,0 +1,12 @@
+{
+  "_comment": "Column mapping for SIMULATED camera counts. Copy and edit for a real counter export.",
+  "columns": {
+    "site_id": "site_id",
+    "window_start": "window_start",
+    "count": "count",
+    "confidence": "confidence"
+  },
+  "timestamp_formats": [
+    "%Y-%m-%d %H:%M"
+  ]
+}

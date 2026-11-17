@@ -93,3 +93,42 @@ def client(dataset_dir):
 
 def place(n: int) -> str:
     return f"place:SIM_S{n:02d}A"
+
+
+# --- early warning ---------------------------------------------------------
+from datetime import timedelta  # noqa: E402
+
+from busplanner.earlywarning.config import FIXTURE_DIR as EW_FX  # noqa: E402
+from busplanner.earlywarning.dataset import WarningDataset  # noqa: E402
+from busplanner.earlywarning.evaluate import load_events  # noqa: E402
+from busplanner.earlywarning.pipeline import build_warning_dataset  # noqa: E402
+from busplanner.earlywarning.sources import load_camera_counts  # noqa: E402
+from busplanner.earlywarning.synthetic import BASELINE_DAYS, FIRST_DAY  # noqa: E402
+
+EW_BASELINE_END = FIRST_DAY + timedelta(days=BASELINE_DAYS - 1)
+
+
+@pytest.fixture(scope="session")
+def camera_obs():
+    return load_camera_counts(EW_FX / "simulated_camera_counts.csv", EW_FX / "sites.csv", EW_FX / "mapping.json")
+
+
+@pytest.fixture(scope="session")
+def ew_build(tmp_path_factory, camera_obs):
+    out = tmp_path_factory.mktemp("ew")
+    result = build_warning_dataset(
+        camera_obs, out, origin="synthetic", baseline_end=EW_BASELINE_END,
+        events=load_events(EW_FX / "simulated_events.csv"),
+    )  # fmt: skip
+    return out, result
+
+
+@pytest.fixture(scope="session")
+def ew_dataset(ew_build):
+    return WarningDataset(ew_build[0])
+
+
+@pytest.fixture(scope="session")
+def ew_client(ew_build, tmp_path_factory):
+    return TestClient(create_app(tmp_path_factory.mktemp("no-planner"), serve_frontend=False,
+                                 warning_dataset_dir=ew_build[0]))  # fmt: skip

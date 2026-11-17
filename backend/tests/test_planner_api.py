@@ -1,3 +1,5 @@
+"""Secondary feature: the journey planner, now served under /api/planner."""
+
 from __future__ import annotations
 
 import json
@@ -23,8 +25,8 @@ def walk(node, path=""):
 
 
 def test_health_and_meta(client):
-    assert client.get("/api/health").json()["status"] == "ok"
-    meta = client.get("/api/meta").json()
+    assert client.get("/api/planner/health").json()["status"] == "ok"
+    meta = client.get("/api/planner/meta").json()
     assert meta["provenance"]["simulated"] is True
     assert meta["provenance"]["gtfs_source"] == meta["provenance"]["tickets_source"] == "synthetic"
     assert meta["disclaimers"][0].startswith("SIMULATED DATA")
@@ -38,17 +40,17 @@ def test_health_and_meta(client):
 
 
 def test_stop_search(client):
-    body = client.get("/api/stops", params={"q": "sim m"}).json()
+    body = client.get("/api/planner/stops", params={"q": "sim m"}).json()
     assert [p["name"] for p in body["places"]] == ["Sim Market", "Sim Mill Road"]
     assert body["places"][0]["stop_ids"] == ["SIM_S03A", "SIM_S03B"]
     assert body["places"][0]["routes"] == ["S1", "S3"]
-    assert len(client.get("/api/stops", params={"limit": 5}).json()["places"]) == 5
-    assert client.get("/api/stops", params={"q": "zzz"}).json()["places"] == []
-    assert client.get("/api/stops", params={"limit": 500}).status_code == 422
+    assert len(client.get("/api/planner/stops", params={"limit": 5}).json()["places"]) == 5
+    assert client.get("/api/planner/stops", params={"q": "zzz"}).json()["places"] == []
+    assert client.get("/api/planner/stops", params={"limit": 500}).status_code == 422
 
 
 def test_journeys_contract(client):
-    response = client.get("/api/journeys", params=Q)
+    response = client.get("/api/planner/journeys", params=Q)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
@@ -68,7 +70,7 @@ def test_journeys_contract(client):
 
 def test_response_never_exposes_occupancy_or_live_fields(client):
     for params in (Q, {**Q, "from": place(12), "to": place(16)}, {**Q, "from": place(10)}):
-        body = client.get("/api/journeys", params=params).json()
+        body = client.get("/api/planner/journeys", params=params).json()
         for path, key, value in walk(body):
             assert key not in FORBIDDEN_KEYS, f"{path}/{key}"
             if key == "relative_rank":
@@ -81,14 +83,14 @@ def test_response_never_exposes_occupancy_or_live_fields(client):
 
 
 def test_road_traffic_is_separate_and_not_configured(client):
-    body = client.get("/api/journeys", params=Q).json()
+    body = client.get("/api/planner/journeys", params=Q).json()
     assert body["road_traffic"]["status"] == "not_configured"
     for path, key, _value in walk(body["options"]):
         assert "traffic" not in key.lower(), f"{path}/{key}"
 
 
 def test_insufficient_evidence_over_http(client):
-    body = client.get("/api/journeys", params={**Q, "from": place(12), "to": place(16)}).json()
+    body = client.get("/api/planner/journeys", params={**Q, "from": place(12), "to": place(16)}).json()
     assert body["status"] == "ok"
     assert [o["status"] for o in body["options"]] == ["ok", "insufficient_evidence", "insufficient_evidence"]
     assert body["options"][1]["journey"] is None
@@ -96,7 +98,7 @@ def test_insufficient_evidence_over_http(client):
 
 
 def test_no_journey_is_200_not_an_error(client):
-    body = client.get("/api/journeys", params={**Q, "time": "23:30"}).json()
+    body = client.get("/api/planner/journeys", params={**Q, "time": "23:30"}).json()
     assert body["status"] == "no_journey" and body["candidates_considered"] == 0
     assert [o["status"] for o in body["options"]] == ["no_journey"] * 3
 
@@ -111,20 +113,20 @@ def test_errors(client):
         ({**Q, "time": "8am"}, 400, "bad_time"),
     ]
     for params, status, code in cases:
-        response = client.get("/api/journeys", params=params)
+        response = client.get("/api/planner/journeys", params=params)
         assert response.status_code == status, params
         assert response.json()["detail"]["code"] == code
-    assert client.get("/api/journeys", params={"from": place(1)}).status_code == 422
+    assert client.get("/api/planner/journeys", params={"from": place(1)}).status_code == 422
 
 
 def test_date_and_time_default_to_now(client):
-    body = client.get("/api/journeys", params={"from": place(1), "to": place(6)}).json()
+    body = client.get("/api/planner/journeys", params={"from": place(1), "to": place(6)}).json()
     assert body["status"] in ("ok", "no_journey")
     assert len(body["request"]["date"]) == 10 and len(body["request"]["time"]) == 5
 
 
 def test_data_quality_report(client):
-    report = client.get("/api/data-quality").json()
+    report = client.get("/api/planner/data-quality").json()
     assert {"generated_at", "provenance", "gtfs", "tickets", "matching", "crowding", "blocked"} <= set(report)
     assert report["gtfs"]["usable"] is True and report["gtfs"]["summary"]["errors"] == 1
     assert report["tickets"]["rows_rejected"] == 15
@@ -135,8 +137,8 @@ def test_data_quality_report(client):
 
 def test_missing_dataset_is_a_503_with_instructions(tmp_path):
     client = TestClient(create_app(tmp_path / "nothing-here", serve_frontend=False))
-    assert client.get("/api/health").json()["status"] == "no_dataset"
-    response = client.get("/api/journeys", params=Q)
+    assert client.get("/api/planner/health").json()["status"] == "no_dataset"
+    response = client.get("/api/planner/journeys", params=Q)
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "no_dataset"
     assert "make data" in response.json()["detail"]["message"]
@@ -144,5 +146,11 @@ def test_missing_dataset_is_a_503_with_instructions(tmp_path):
 
 def test_openapi_documents_the_contract(client):
     spec = client.get("/openapi.json").json()
-    assert {"/api/health", "/api/meta", "/api/stops", "/api/journeys", "/api/data-quality"} <= set(spec["paths"])
+    assert {
+        "/api/planner/health",
+        "/api/planner/meta",
+        "/api/planner/stops",
+        "/api/planner/journeys",
+        "/api/planner/data-quality",
+    } <= set(spec["paths"])
     assert "JourneyResponse" in spec["components"]["schemas"]
